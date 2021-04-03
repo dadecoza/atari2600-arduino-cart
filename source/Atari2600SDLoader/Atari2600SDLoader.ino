@@ -17,6 +17,8 @@
 #define SHIFT_CLK 19
 #define SD_CHIP_SELECT 10
 
+#define SRAM_SIZE 8192
+
 File myFile;
 
 void setup() {
@@ -76,8 +78,8 @@ void writeSRAM() {
   String fileName = String(getNextIndex()) + ".bin";
   myFile = SD.open(fileName);
   byte b;
-  //We will write to all 8192 addresses repeating the file contents
-  while (address < 8192) {
+  //We will write to all addresses repeating the file contents
+  while (address < SRAM_SIZE) {
     if (myFile.available()) {
       b = myFile.read();
     } else {
