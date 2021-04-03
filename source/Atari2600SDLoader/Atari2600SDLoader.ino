@@ -29,7 +29,7 @@ void setup() {
   pinMode(ATARI_POWER, INPUT);
   while (digitalRead(ATARI_POWER)) delay(5);
 
-  //Disable UART (probably not necessary
+  //Disable UART (probably not necessary)
   UCSR0B &= ~(_BV(TXEN0));  //disable UART TX
   UCSR0B &= ~(_BV(RXEN0));  //disable UART RX
 
