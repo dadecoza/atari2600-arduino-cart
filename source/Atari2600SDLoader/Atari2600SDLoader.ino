@@ -7,15 +7,19 @@
 
 #include <SPI.h>
 #include <SD.h>
+#include "kernels.h"
 
 #define ATARI_POWER 8
 #define SRAM_OUTPUT_EN 14
 #define SRAM_WRITE_EN 15
 #define SHIFT_DATA 16
-#define SHIFT_OUTPUT_EN 17
+#define SHIFT_OUTPUT_EN 17 
 #define SHIFT_LATCH 18
 #define SHIFT_CLK 19
 #define SD_CHIP_SELECT 10
+
+#define KERNEL_NO_SD 0
+#define KERNEL_NO_FILE 1
 
 #define SRAM_SIZE 8192
 
@@ -39,13 +43,15 @@ void setup() {
   pinMode(SHIFT_CLK, OUTPUT);
   pinMode(SHIFT_DATA, OUTPUT);
 
+  prepareToWrite();
   //Wait for SD card to initialize
   if (!SD.begin(SD_CHIP_SELECT)) {
-    while (1);
+    writeSramFromFlash(KERNEL_NO_SD);
+  } else {
+    //Finally write the ROM file to SRAM
+    writeSRAM();
   }
-
-  //Finally write the ROM file to SRAM
-  writeSRAM();
+  initIo();
 }
 
 
@@ -71,11 +77,28 @@ void prepareToWrite() {
   DDRD = B11111111; //Set PORTD direction register for output
 }
 
+//There are two "ROMs" with error messages stored in PROGMEM. One for when we can't read the SD card, and one for when we can't find file.
+void writeSramFromFlash(int p) {
+  byte b;
+  int address=0;
+  for (int i=0; i<(SRAM_SIZE/512); i++) {
+    for (int k=0; k<512; k++) {
+      b = pgm_read_byte_near((p ? kernelNoFile : kernelNoSD) + k);
+      writeByte(address, b);
+      address++;
+    }
+  }
+}
+
 //Find the next file on the SD card and write it to the SRAM
 void writeSRAM() {
-  prepareToWrite();
+  int index = getNextIndex();
+  if (!index) {
+    writeSramFromFlash(kernelNoFile);
+    return;
+  }
   int address = 0;
-  String fileName = String(getNextIndex()) + ".bin";
+  String fileName = String(index) + ".bin";
   myFile = SD.open(fileName);
   byte b;
   //We will write to all addresses repeating the file contents
@@ -90,7 +113,6 @@ void writeSRAM() {
     address++;
   }
   myFile.close();
-  initIo();
 }
 
 //Clock the shift registers for the requested address lines
@@ -113,16 +135,20 @@ void writeByte(int address, byte data) {
 
 //Get the next index number of a ROM file and update the index.dat file
 int getNextIndex() {
-  if (SD.exists("index.dat")) {
-    int i = getFileIndex() + 1;
-    for (int n = i; n < 50; n++) {
-      String fileName = String(n) + ".bin";
-      if (SD.exists(fileName)) {
-        return updateFileIndex(n);
-      }
+  int i = getFileIndex() + 1;
+  for (int n = i; n < 50; n++) {
+    String fileName = String(n) + ".bin";
+    if (SD.exists(fileName)) {
+      return updateFileIndex(n);
     }
   }
-  return updateFileIndex(1);
+  for (int n = 0; n < i; n++) {
+    String fileName = String(n) + ".bin";
+    if (SD.exists(fileName)) {
+      return updateFileIndex(n);
+    }
+  }
+  return 0;
 }
 
 //Write a ROM file index number in the index.dat file, replacing the file if it already exists
@@ -143,6 +169,7 @@ int getFileIndex() {
   if ((myFile) && (myFile.available())) {
     i = myFile.read();
     myFile.close();
+    return i;
   }
-  return i;
+  return updateFileIndex(0);
 }
